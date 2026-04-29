@@ -13,6 +13,10 @@ For additional host project mounts, use an untracked `Vagrantfile.local` with ex
 - Vagrant
 - VirtualBox
 
+```bash
+sudo apt-get install vagrant virtualbox-dkms linux-headers-generic
+```
+
 ## VirtualBox setup and checks
 
 Install VirtualBox from the official package for your OS, then verify it is available:
@@ -64,27 +68,82 @@ vagrant status
 
 If `vagrant up` fails early with provider compatibility errors, upgrade Vagrant first and retry.
 
-## What is installed automatically
+## Provisioning profile
 
-- Core build tools: `build-essential`, `make`
-- Common utilities: `curl`, `git`, `jq`, `vim`, `zip`, `unzip`
-- Python toolchain: `python3`, `python3-pip`
-- Docker stack: `docker-ce`, `docker-ce-cli`, `containerd.io`, `docker-buildx-plugin`, `docker-compose-plugin`
-- JavaScript runtimes: Node.js 22.x (LTS line) and Bun
+Default enabled sections:
 
-## Baseline hardening
+- `base`: core build tools and common utilities
+- `python`: Python toolchain + venv + pyenv bootstrap
+- `node`: Node.js 22 + nvm + Bun
+- `opencode`: global `opencode-ai` npm package
 
-- SSH password authentication disabled (`PasswordAuthentication no`)
-- Root SSH login disabled (`PermitRootLogin no`)
-- UFW enabled with default deny incoming and allow outgoing
-- UFW routed traffic allowed for container networking (`ufw default allow routed`)
-- OpenSSH explicitly allowed in UFW
-- IPv4 forwarding enabled for Docker bridge networking (`net.ipv4.ip_forward=1`)
+Optional sections you can enable in `Vagrantfile.local`:
+
+- `docker`: Docker Engine + Buildx + Compose plugin
+- `k8s`: `kubectl` + `kubelogin`
+- `gh`: GitHub CLI
+- `security`: SSH hardening + UFW + IPv4 forwarding
+
+`cleanup` is always executed automatically at the end of provisioning.
+
+### How section selection works
+
+- The VM always runs `provision/bootstrap.sh`.
+- Enabled sections are passed through `provision_sections` from `Vagrantfile` / `Vagrantfile.local`.
+- Default value is:
+
+```ruby
+provision_sections = ["base", "python"]
+```
+
+- Section names are case-insensitive (`"Docker"` and `"docker"` are equivalent).
+- Duplicate section names are ignored.
+- Unknown section names fail provisioning early with a clear error.
+
+Example `Vagrantfile.local`:
+
+```ruby
+provision_sections = ["base", "python", "docker", "node", "gh"]
+```
+
+### Section reference
+
+| Section | Installs/configures | Notes |
+|---|---|---|
+| `base` | apt tooling, build deps, common CLI tools, Java runtime | Good minimal baseline |
+| `python` | `python3` venv setup + pyenv bootstrap + shell init | Included by default |
+| `docker` | Docker CE, Buildx, Compose plugin | Adds `vagrant` to `docker` group |
+| `node` | Node.js 22 (NodeSource), nvm init, Bun | Useful for JS/TS projects |
+| `k8s` | `kubectl` and `kubelogin` | Client-side tools only |
+| `gh` | GitHub CLI + shell completion | Handy for PR/issue workflows |
+| `security` | SSH hardening + UFW + IPv4 forwarding | Apply when you want stricter VM defaults |
+| `opencode` | `npm install -g opencode-ai` | Optional convenience install |
+| `cleanup` | apt cache/list cleanup | Always executed, not configurable |
+
+### Common presets
+
+Minimal Python sandbox:
+
+```ruby
+provision_sections = ["base", "python"]
+```
+
+Backend/devops sandbox:
+
+```ruby
+provision_sections = ["base", "python", "docker", "k8s", "gh", "security"]
+```
+
+Full workstation-style sandbox:
+
+```ruby
+provision_sections = ["base", "python", "docker", "node", "k8s", "gh", "security", "opencode"]
+```
 
 Notes:
 
 - Vagrant uses key-based SSH by default, so disabling SSH passwords does not break `vagrant ssh`.
-- If your host already enforces networking constraints, you can relax UFW rules in `provision/hardening.sh`.
+- Security/network rules are applied only when `security` is enabled.
 
 ## Usage
 
@@ -222,9 +281,22 @@ vagrant reload
 vagrant provision
 ```
 
+Re-run only provisioning (without recreating VM) after editing `Vagrantfile.local`:
+
+```bash
+vagrant reload --provision
+```
+
+If you changed low-level identity mapping expectations (host UID/GID), prefer a full rebuild:
+
+```bash
+vagrant destroy -f
+vagrant up
+```
+
 ## Install OpenCode inside the VM
 
-OpenCode is not preinstalled by the provisioner. Install it once per VM:
+If you do not enable the optional `opencode` section, install OpenCode once per VM:
 
 ```bash
 vagrant ssh
@@ -243,9 +315,41 @@ vagrant ssh -c "~/.opencode/bin/opencode --version"
 ## Runtime checks inside VM
 
 ```bash
-docker --version
-node --version
-bun --version
-~/.opencode/bin/opencode --version
-sudo ufw status verbose
+python3 --version
+docker --version || true
+node --version || true
+bun --version || true
+gh --version || true
+kubectl version --client || true
+opencode --version || ~/.opencode/bin/opencode --version || true
+sudo ufw status verbose || true
 ```
+
+## OpenCode lsp
+
+See: https://open-code.ai/en/docs/lsp.
+
+For Python I create a venv in
+
+Create it with:
+```bash
+python3 -m venv .venv
+PATH="$HOME/.venv/bin:$PATH"
+echo 'PATH="$HOME/.venv/bin:$PATH"' >> /home/vagrant/.bashrc
+pip install pyright
+```
+
+## Security considerations
+
+Be careful on witch credentials do you give to the agents.
+
+See also: https://github.com/camptocamp/c2c_iso_guidelines/blob/ai-guidelines/geospatial/ai_guidelines.md.
+
+In the file `github-skill-template.md` I propose the base of a skill I use to provide the GitHub token. to use that you should also add the wrapper in `scripts/<name>-token` with:
+```bash
+#!/usr/bin/env bash
+set -eu
+
+GH_TOKEN='<token>' exec "$@"
+```
+
