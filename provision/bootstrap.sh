@@ -47,4 +47,40 @@ systemctl start docker
 apt-get clean
 rm -rf /var/lib/apt/lists/*
 
+# Install nvm for the vagrant user
+NVM_VERSION="v0.40.3"
+if [ ! -d /home/vagrant/.nvm ]; then
+  sudo -u vagrant bash -c "
+    curl -fsSL https://raw.githubusercontent.com/nvm-sh/nvm/${NVM_VERSION}/install.sh | bash
+  "
+fi
+
+# Install pyenv dependencies and pyenv for the vagrant user
+apt-get install -y --no-install-recommends \
+  libssl-dev \
+  zlib1g-dev \
+  libbz2-dev \
+  libreadline-dev \
+  libsqlite3-dev \
+  libncursesw5-dev \
+  xz-utils \
+  tk-dev \
+  libxml2-dev \
+  libxmlsec1-dev \
+  libffi-dev \
+  liblzma-dev
+
+if [ ! -d /home/vagrant/.pyenv ]; then
+  sudo -u vagrant bash -c "
+    curl -fsSL https://pyenv.run | bash
+  "
+fi
+
+# Install uv for the vagrant user
+if [ ! -f /home/vagrant/.local/bin/uv ]; then
+  sudo -u vagrant bash -c "
+    curl -fsSL https://astral.sh/uv/install.sh | bash
+  "
+fi
+
 echo "Provisioning complete."
