@@ -37,7 +37,7 @@ Quick provider check from this repository:
 
 ```bash
 vagrant validate
-vagrant up --provider=virtualbox -- -X
+vagrant up --provider=virtualbox
 ```
 
 If VirtualBox is installed but Vagrant reports the provider is unusable, the issue is usually a Vagrant/VirtualBox version mismatch.

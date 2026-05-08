@@ -24,6 +24,7 @@ apt-get install -y --no-install-recommends \
   python3-wheel \
   openjdk-17-jdk-headless \
   xclip \
+  xauth \
   bash-completion
 
 python3 -m venv .venv

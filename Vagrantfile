@@ -57,6 +57,8 @@ Vagrant.configure("2") do |config|
   config.vm.box = "bento/ubuntu-24.04"
   config.vm.hostname = vm_hostname
   config.vm.boot_timeout = 600
+  config.ssh.forward_x11 = true
+
 
   # Disable default mapping of current folder to /vagrant.
   config.vm.synced_folder ".", "/vagrant", disabled: true
